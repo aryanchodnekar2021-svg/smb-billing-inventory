@@ -1,11 +1,21 @@
-// BizFlow Prisma foundation — Milestone 0.
+// BizFlow domain foundation — M2 (multi-tenant).
 //
-// Intentionally contains NO business models yet (no products, customers,
-// invoices, GST tables, …). Those arrive in dedicated milestones with
-// reviewed migrations. This file establishes:
-//   - the PostgreSQL datasource contract (DATABASE_URL)
-//   - the Prisma Client generator
-// so future milestones can add models without re-plumbing infra.
+// Tenant design principle: `Business` is the tenant boundary. Every future
+// tenant-owned model (Product, Inventory, Customer, Supplier, Sale, Invoice,
+// Payment, …) MUST carry a `businessId` foreign key to `Business`, so that
+// tenant ownership is explicit at the database level. No application-level
+// authorization is implemented in this milestone — this is the data
+// foundation that authorization will build on.
+//
+// Referential actions (chosen deliberately):
+// - BusinessMember.user -> User (onDelete: Cascade): a membership row has no
+//   meaning without its user; deleting a user removes only their own
+//   membership rows. Businesses and other users are untouched.
+// - BusinessMember.business -> Business (onDelete: Cascade): deleting a
+//   business removes only its own membership roster. Users and other
+//   businesses are untouched.
+// Neither rule can silently destroy unrelated tenant data: cascades fan in
+// to the join table only, never across tenants.
 
 generator client {
   provider = "prisma-client-js"
@@ -14,4 +24,60 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+/// Role vocabulary for business membership. Data model only — no permission
+/// system, role-management UI, or backend authorization in this milestone.
+enum Role {
+  OWNER
+  ADMIN
+  MANAGER
+  STAFF
+}
+
+/// Identity record for a person using BizFlow. Supports future Auth.js
+/// integration (providers/adapter tables arrive with the auth milestone).
+/// No passwords are stored here — plaintext or otherwise.
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships BusinessMember[]
+
+  @@map("users")
+}
+
+/// Tenant boundary. One row per subscribing business; all future
+/// business-owned records reference this table via `businessId`.
+model Business {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members BusinessMember[]
+
+  @@map("businesses")
+}
+
+/// Join between a User and a Business. The composite unique constraint
+/// prevents the same user from being added twice to the same business.
+model BusinessMember {
+  id         String   @id @default(cuid())
+  userId     String
+  businessId String
+  role       Role     @default(STAFF)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, businessId])
+  @@index([businessId])
+  @@map("business_members")
 }
