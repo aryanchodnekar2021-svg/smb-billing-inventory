@@ -25,7 +25,7 @@ milestones can add real features without re-plumbing.
 | Validation | Zod (env + future form/domain validation)                     |
 | Auth       | Auth.js / next-auth v4 (decision made; not wired yet)         |
 | Database   | PostgreSQL via Prisma ORM (`prisma/schema.prisma`, no models yet) |
-| Testing    | Node built-in test runner (`node --test tests/`)              |
+| Testing    | Node built-in test runner (`npm test` → `node --test "tests/**/*.test.mjs"`) |
 | Lint/type  | ESLint (`eslint-config-next`) + `tsc --noEmit`                |
 
 Backend uses Next.js Route Handlers / server modules (`src/server`, `src/app/api`).
