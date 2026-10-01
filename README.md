@@ -2,11 +2,12 @@
 
 Billing, inventory and business management SaaS for small Indian businesses.
 
-> **Status: Milestone 0 — SaaS foundation only.** The app shell (sidebar, header,
-> dashboard empty state, placeholder routes), design system, Prisma/PostgreSQL
-> plumbing and tooling are in place. No business features (billing, POS,
+> **Status: M2 — multi-tenant database foundation.** The app shell (sidebar, header,
+> dashboard empty state, placeholder routes), design system, and the PostgreSQL +
+> Prisma multi-tenant foundation (`User`, `Business`, `BusinessMember`, `Role`
+> enum + first migration) are in place. No business features (billing, POS,
 > inventory, products, customers, suppliers, GST, invoices, payments, reports,
-> subscriptions) are implemented yet.
+> subscriptions) and no authentication/authorization are implemented yet.
 
 ## Purpose
 
@@ -35,7 +36,7 @@ No separate backend service.
 
 - Node.js 20+ (developed with Node 24)
 - npm 10+
-- PostgreSQL 15+ (only needed once migrations land; not required to run Milestone 0)
+- PostgreSQL 16 (local development database — see below)
 
 ## Installation
 
@@ -49,11 +50,58 @@ npm install
 
 ```bash
 cp .env.example .env
-# Edit .env — DATABASE_URL can stay empty until the database milestone.
+# Edit .env — set DATABASE_URL to your local PostgreSQL connection string.
 ```
 
 Required keys (see `.env.example`): `DATABASE_URL`, `NEXTAUTH_URL`, `NEXTAUTH_SECRET`.
 Never commit `.env`. Never put real credentials in source code.
+
+## Local database setup
+
+No Docker or cloud database is required. Any local PostgreSQL 16 instance works:
+
+```bash
+# 1. Create the role and database (example values — use your own password)
+psql -U postgres -d postgres -c "CREATE ROLE bizflow LOGIN PASSWORD '<password>' CREATEDB;"
+psql -U postgres -d postgres -c "CREATE DATABASE bizflow OWNER bizflow;"
+
+# 2. Point .env at it
+# DATABASE_URL=postgresql://bizflow:<password>@127.0.0.1:5432/bizflow?schema=public
+
+# 3. Apply migrations and generate the client
+npx prisma migrate dev
+```
+
+Other useful commands:
+
+```bash
+npx prisma validate       # validate schema (needs DATABASE_URL set)
+npx prisma generate       # regenerate Prisma Client (no live DB needed)
+npx prisma migrate status # check applied vs pending migrations
+npx prisma studio         # inspect data (dev only, never seed fake production data)
+```
+
+Migration workflow: model changes go in `prisma/schema.prisma`, then
+`npx prisma migrate dev --name <descriptive_name>` creates and applies a real
+migration under `prisma/migrations/`. Never hand-write migration files and never
+commit a real `DATABASE_URL`.
+
+## Current database models (M2)
+
+Tenant boundary: `Business`. A user may belong to many businesses via
+`BusinessMember`; a business may have many users. `Role` is `OWNER | ADMIN |
+MANAGER | STAFF` (data model only — no permission system yet).
+
+| Model          | Key fields                                                                 |
+| -------------- | -------------------------------------------------------------------------- |
+| User           | id, email (unique), name?, createdAt, updatedAt                            |
+| Business       | id, name, slug (unique), createdAt, updatedAt                              |
+| BusinessMember | id, userId → User (cascade), businessId → Business (cascade), role, unique(userId, businessId) |
+
+Deleting a user removes only their membership rows; deleting a business removes
+only its membership roster — cascades fan in to the join table and can never
+destroy unrelated tenant data. Future tenant-owned models (Product, Inventory,
+Customer, …) must reference `Business` via `businessId`.
 
 ## Development
 
@@ -94,16 +142,20 @@ src/
 ├── server/               # db (Prisma singleton), auth (next-auth options stub)
 └── types/                # shared foundation types
 prisma/
-└── schema.prisma         # PostgreSQL datasource, no models yet
+├── schema.prisma         # PostgreSQL datasource + User/Business/BusinessMember/Role
+└── migrations/           # real applied migrations (init_multi_tenant_foundation)
 tests/
-└── smoke.test.mjs        # foundation assertions
+├── smoke.test.mjs        # foundation assertions
+└── db.multitenant.test.mjs # multi-tenant integrity tests (need live DB; skip otherwise)
 ```
 
 ## Current status
 
-- [x] Milestone 0: repository preflight, Next.js + TS + Tailwind scaffold, app shell,
+- [x] M1: repository preflight, Next.js + TS + Tailwind scaffold, app shell,
       design system, Prisma foundation, env pattern, CI, docs
-- [ ] Business features: none yet (products, inventory, billing, GST, … all pending)
+- [x] M2: local PostgreSQL, multi-tenant models (User, Business, BusinessMember,
+      Role), first real migration, DB integrity tests
+- [ ] Auth/authz, products, inventory, billing, GST, … all pending (separate milestones)
 
 ## Security notes
 

@@ -33,11 +33,24 @@ describe("BizFlow foundation smoke tests", () => {
     }
   });
 
-  it("prisma foundation has datasource but no business models yet", () => {
+  it("prisma schema has the multi-tenant foundation models only", () => {
     const schema = readFileSync(join(root, "prisma", "schema.prisma"), "utf8");
     assert.match(schema, /datasource db/);
     assert.match(schema, /provider = "postgresql"/);
-    assert.doesNotMatch(schema, /model\s+\w+/);
+    for (const model of ["model User", "model Business", "model BusinessMember"]) {
+      assert.ok(schema.includes(model), `missing model: ${model}`);
+    }
+    assert.match(schema, /enum Role/);
+    for (const forbidden of [
+      "model Product",
+      "model Customer",
+      "model Supplier",
+      "model Invoice",
+      "model Sale",
+      "model Payment",
+    ]) {
+      assert.ok(!schema.includes(forbidden), `out-of-scope model present: ${forbidden}`);
+    }
   });
 
   it(".env.example documents required keys without secrets", () => {
