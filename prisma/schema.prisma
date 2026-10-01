@@ -1,0 +1,17 @@
+// BizFlow Prisma foundation — Milestone 0.
+//
+// Intentionally contains NO business models yet (no products, customers,
+// invoices, GST tables, …). Those arrive in dedicated milestones with
+// reviewed migrations. This file establishes:
+//   - the PostgreSQL datasource contract (DATABASE_URL)
+//   - the Prisma Client generator
+// so future milestones can add models without re-plumbing infra.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
